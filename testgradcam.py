@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 FILENAME="/home/toyama/UwU/csv/srs/A46_srs.tif"
 REFFILENAME="/home/toyama/UwU/csv/fluo/A46_fluo.tif"
-PTH_FILENAME="[UwU]-4-6-10-8-6[batch:10-iter1000].pth"
+PTH_FILENAME="[UwU]-4-6-10-8-6[batch:4-iter1].pth"
 SAVEFILENAME="/home/toyama/UwU/test2/A46"
 
 class seg_grad_cam:
@@ -29,11 +29,13 @@ class seg_grad_cam:
 
     # make hooks
         def save_feature_grad(module, in_grad, out_grad):
-            self.feature_grad.append(out_grad[0])
+            print(out_grad[0].shape)
+            self.feature_grad.append(out_grad[0].detach())
         self.hooks.append(self.feature_layer.register_backward_hook(save_feature_grad))
 
         def save_feature_map(module, inp, outp):
-            self.feature_map.append(outp[0])
+            print(outp[0].shape)
+            self.feature_map.append(outp[0].detach())
         self.hooks.append(self.feature_layer.register_forward_hook(save_feature_map))
     
     def forward(self, x):
@@ -53,6 +55,7 @@ class seg_grad_cam:
 
 #Load the trained model
 model = torch.load(PTH_FILENAME)
+print(model.net)
 # input the model to class seg_grad_cam
 FEATURE_LAYER = model.net.net_recurse.sub_2conv_more.relu1
 M = []
@@ -72,19 +75,16 @@ outputimg = torch.squeeze(outputimg,dim=0)
 outputimg = torch.squeeze(outputimg,dim=0)
 # back propargate
 segradcam.backward_prop(outputimg)
-print("GRAD")
-print(segradcam.feature_grad)
-plt.imshow(segradcam.feature_grad[5].detach().numpy()[0,3,:,:],cmap="viridis")
-plt.colorbar()
-plt.savefig("grad.png")
 
-print("MAP")
-print(segradcam.feature_map)
-plt.clf()
-plt.imshow(segradcam.feature_map[3].detach().numpy()[3,:,:],cmap="viridis")
-plt.colorbar()
-plt.savefig("map.png")
+#plt.imshow(segradcam.feature_grad[5].detach().numpy()[0,3,:,:],cmap="viridis")
+#plt.colorbar()
+#plt.savefig("grad.png")
 
+#plt.clf()
+#plt.imshow(segradcam.feature_map[3].detach().numpy()[3,:,:],cmap="viridis")
+#plt.colorbar()
+#plt.savefig("map.png")
 
+segradcam.clear_hook()
 ## UwUの実装において、スペクトル学習の後のU-Netについて、スペクトル毎のfor文で回しているため、
 ## final_chanの数だけforwardとbackwardが発生しているものとおもわれる。
