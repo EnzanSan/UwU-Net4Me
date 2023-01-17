@@ -6,8 +6,8 @@ import tifffile
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 
-FILENAME="/home/toyama/UwU/csv/srs/A46_srs.tif"
-REFFILENAME="/home/toyama/UwU/csv/fluo/A46_fluo.tif"
+FILENAME="/home/toyama/UwU/csv/srs/A23_srs.tif"
+REFFILENAME="/home/toyama/UwU/csv/fluo/A23_fluo.tif"
 PTH_FILENAME="/home/toyama/UwU/[UwU]-4-8-10-8-6[batch:10-iter1000].pth"
 SAVEFILENAME="/home/toyama/UwU/test2/A46"
 def rec_ref(target:any, depth:int,names:list):
@@ -60,10 +60,10 @@ class seg_grad_cam:
 model = torch.load(PTH_FILENAME)
 #print(model.net.net_recurse)
 # input the model to class seg_grad_cam
-FEATURE_LAYER = model.net.net_recurse.sub_u.sub_u.sub_u.sub_u.sub_u.sub_u.sub_2conv_more.relu1 # rec_ref(model.net.net_recurse.sub_u,1,['sub_u']).bottleneck
+FEATURE_LAYER = model.net.net_recurse.sub_u.sub_u.sub_2conv_more.relu1 # rec_ref(model.net.net_recurse.sub_u,1,['sub_u']).bottleneck
 M = []
-for i in range(128,512-128):
-    for j in range(128,512-128):
+for i in range(256-25,256+25):
+    for j in range(256-25,256+25):
         M.append((i,j))
 segradcam = seg_grad_cam(model,FEATURE_LAYER,M,img_h=512,img_w=512)
 segradcam.reg_hooks()
@@ -82,17 +82,28 @@ segradcam.backward_prop(outputimg)
 
 #intermediate value
 forward = segradcam.feature_map
-backward = segradcam.feature_grad
+backward = segradcam.feature_grad.squeeze(0)
 
 print(forward.shape)
 print(backward.shape)
 segradcam.clear_hook()
 
-plt.imshow(forward.detach().numpy()[1,:,:],cmap="viridis")
+forward_np = forward.detach().numpy()
+backward_np = backward.detach().numpy()
+
+outp = np.zeros_like(backward_np[0,:,:])
+for i in range(len(forward_np[:,0,0])):
+    outp = np.add(outp,backward[i].mean()*forward_np[i])
+
+plt.imshow(outp,cmap="jet")
+plt.colorbar()
+plt.savefig("out"+".png")
+
+plt.imshow(forward_np[1,:,:],cmap="viridis")
 plt.colorbar()
 plt.savefig("map"+".png")
 
-plt.imshow(backward.detach().numpy()[0,0,:,:],cmap="viridis")
+plt.imshow(backward_np[0,:,:],cmap="viridis")
 plt.colorbar()
 plt.savefig("grad"+".png")
 
