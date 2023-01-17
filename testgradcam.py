@@ -8,18 +8,24 @@ import matplotlib.pyplot as plt
 
 FILENAME="/home/toyama/UwU/csv/srs/A46_srs.tif"
 REFFILENAME="/home/toyama/UwU/csv/fluo/A46_fluo.tif"
-PTH_FILENAME="[UwU]-4-6-10-8-6[batch:4-iter1].pth"
+PTH_FILENAME="/home/toyama/UwU/[UwU]-4-8-10-8-6[batch:10-iter1000].pth"
 SAVEFILENAME="/home/toyama/UwU/test2/A46"
+def rec_ref(target:any, depth:int,names:list):
+    """
+    A tool for recursively accesssing members of classes.
+    """
+    result_obj = target
+    for i in range(depth):
+        for index in names:
+            result_obj = vars(result_obj)[index]
+    return result_obj
 
 class seg_grad_cam:
-    def __init__(self,model,feature_layer,M,img_h = 512,img_w = 512,clss = 1):
-        self.feature_grad = []
-        self.feature_map = []
+    def __init__(self,model,target_layer,M,img_h = 512,img_w = 512):
         self.img_h = img_h
         self.img_w = img_w
-        self.cls = clss
         self.model = model
-        self.feature_layer = feature_layer
+        self.target_layer = target_layer
         self.M = M
         # Turn the model into evaluation mode
         self.model.net.to('cpu')
@@ -27,19 +33,16 @@ class seg_grad_cam:
         # hooks list which will be removed in the end
         self.hooks = []
 
-    # make hooks
-        def save_feature_grad(module, in_grad, out_grad):
-            print(out_grad[0].shape)
-            self.feature_grad.append(out_grad[0].detach())
-        self.hooks.append(self.feature_layer.register_backward_hook(save_feature_grad))
-
-        def save_feature_map(module, inp, outp):
-            print(outp[0].shape)
-            self.feature_map.append(outp[0].detach())
-        self.hooks.append(self.feature_layer.register_forward_hook(save_feature_map))
-    
     def forward(self, x):
         return self.model.net(x)
+
+    def reg_hooks(self):
+        def save_feature_grad(module, in_grad, out_grad):
+            self.feature_grad = out_grad[0]
+        def save_feature_map(module, inp, outp):
+            self.feature_map = outp[0]
+        self.hooks.append(self.target_layer.register_backward_hook(save_feature_grad))
+        self.hooks.append(self.target_layer.register_forward_hook(save_feature_map))
 
     def backward_prop(self,output):
         self.model.net.zero_grad()
@@ -55,14 +58,15 @@ class seg_grad_cam:
 
 #Load the trained model
 model = torch.load(PTH_FILENAME)
-print(model.net)
+#print(model.net.net_recurse)
 # input the model to class seg_grad_cam
-FEATURE_LAYER = model.net.net_recurse.sub_2conv_more.relu1
+FEATURE_LAYER = model.net.net_recurse.sub_u.sub_u.sub_u.sub_u.sub_u.sub_u.sub_2conv_more.relu1 # rec_ref(model.net.net_recurse.sub_u,1,['sub_u']).bottleneck
 M = []
 for i in range(128,512-128):
     for j in range(128,512-128):
         M.append((i,j))
-segradcam = seg_grad_cam(model,FEATURE_LAYER,M,img_h=512,img_w=512,clss=1)
+segradcam = seg_grad_cam(model,FEATURE_LAYER,M,img_h=512,img_w=512)
+segradcam.reg_hooks()
 
 #Load tif image and convert it into tensor form.(Using read_tifffile method in dataload.py)
 input_image = dl.read_tifffile(device='cpu', filename=FILENAME)
@@ -76,15 +80,21 @@ outputimg = torch.squeeze(outputimg,dim=0)
 # back propargate
 segradcam.backward_prop(outputimg)
 
-#plt.imshow(segradcam.feature_grad[5].detach().numpy()[0,3,:,:],cmap="viridis")
-#plt.colorbar()
-#plt.savefig("grad.png")
+#intermediate value
+forward = segradcam.feature_map
+backward = segradcam.feature_grad
 
-#plt.clf()
-#plt.imshow(segradcam.feature_map[3].detach().numpy()[3,:,:],cmap="viridis")
-#plt.colorbar()
-#plt.savefig("map.png")
-
+print(forward.shape)
+print(backward.shape)
 segradcam.clear_hook()
+
+plt.imshow(forward.detach().numpy()[1,:,:],cmap="viridis")
+plt.colorbar()
+plt.savefig("map"+".png")
+
+plt.imshow(backward.detach().numpy()[0,0,:,:],cmap="viridis")
+plt.colorbar()
+plt.savefig("grad"+".png")
+
 ## UwUの実装において、スペクトル学習の後のU-Netについて、スペクトル毎のfor文で回しているため、
 ## final_chanの数だけforwardとbackwardが発生しているものとおもわれる。
